@@ -1,6 +1,7 @@
 # Ignore all json files
 *.json
 *.csv
+*.zip
 
 # Remove pycache
 __pycache__
