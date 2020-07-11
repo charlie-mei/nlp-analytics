@@ -5,3 +5,7 @@
 
 # Remove pycache
 __pycache__
+
+#
+*.vscode
+*.idea

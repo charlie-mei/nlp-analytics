@@ -5,6 +5,10 @@ from urllib import request
 from bs4 import BeautifulSoup
 from bs4.element import Comment
 
+from nltk.stem.wordnet import WordNetLemmatizer
+
+import re
+
 import spacy
 from spacy.util import minibatch, compounding
 from spacy.pipeline import SentenceSegmenter
@@ -20,6 +24,19 @@ from sumy.parsers.plaintext import PlaintextParser
 from sumy.parsers.html import HtmlParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
+
+from pyspark import SparkContext
+from pyspark.sql import SQLContext
+sc = SparkContext() 
+sqlContext = SQLContext(sc)
+from pyspark.mllib.linalg import Vector, Vectors
+from pyspark.mllib.clustering import LDA, LDAModel
+from pyspark.ml.feature import RegexTokenizer, StopWordsRemover, Word2Vec
+
+import gensim, operator
+from scipy import spatial
+import numpy as np
+from gensim.models import KeyedVectors
 
 
 nlp = spacy.load('en_core_web_sm')
@@ -378,3 +395,103 @@ class TextSummary(object):
 
     def output(self):
         return self.summary
+    
+# ===========================================================================================================
+''' Text Cleaning Functions '''
+def cleanup_pretokenize(text):
+    #text = re.sub(r'^https?:\/\/.*[\r\n]*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'http\S+', '', text)
+    text = text.replace("'s", " ")
+    text = text.replace("n't", " not ")
+    text = text.replace("'ve", " have ")
+    text = text.replace("'re", " are ")
+    text = text.replace("I'm"," I am ")
+    text = text.replace("you're"," you are ")
+    text = text.replace("You're"," You are ")
+    text = text.replace("-"," ")
+    text = text.replace("/"," ")
+    text = text.replace("("," ")
+    text = text.replace(")"," ")
+    text = text.replace("%"," percent ")
+    return text
+
+
+def text_cleanup(row):
+    lmtzr = WordNetLemmatizer()
+    desc = row[2].strip().lower()
+    tokens = [w.lemma_ for w in nlp(cleanup_pretokenize(desc))]
+    tokens = [token for token in tokens if token.isalpha()]
+    tokens = [token for token in tokens if len(token) > 3]
+    #tokens = [lmtzr.lemmatize(token,'v') for token in tokens]
+    row[2] = ' '.join(tokens)
+    return row
+
+# Custom regex tokenizer
+regexTokenizer = RegexTokenizer(gaps = False, pattern = '\w+', inputCol = 'description', outputCol = 'tokens')
+
+# Custom stopword remover
+swr = StopWordsRemover(inputCol = 'tokens', outputCol = 'tokens_sw_removed')
+
+# function checks whether the input words are present in the vocabulary for the model
+def vocab_check(vectors, words):
+    
+    output = list()
+    for word in words:
+        if word in vectors.vocab:
+            output.append(word.strip())
+            
+    return output
+
+
+# ===========================================================================================================
+''' Loading Crunchbase data '''
+
+def load_crunchbase_df(path):
+    crunchbase_df = sqlContext.read.option("header", "true").option("delimiter", ",") \
+                    .option("inferSchema", "true") \
+                    .csv(path)
+    return crunchbase_df
+
+# ===========================================================================================================
+''' Word Vector Calculations '''
+
+def cossim(v1, v2): 
+    return np.dot(v1, v2) / np.sqrt(np.dot(v1, v1)) / (np.sqrt(np.dot(v2, v2))+.1)
+
+def vec_similarity(input1, input2, vectors):
+    term_vectors = [np.zeros(300), np.zeros(300)]
+    terms = [input1, input2]
+        
+    for index, term in enumerate(terms):
+        for i, t in enumerate(term.split(' ')):
+            try:
+                term_vectors[index] += vectors[t]
+            except:
+                term_vectors[index] += 0
+        
+    result = (1 - spatial.distance.cosine(term_vectors[0], term_vectors[1]))
+    if result is 'nan':
+        result = 0
+        
+    return result
+
+
+# function calculates similarity between two strings using a particular word vector model
+def calc_similarity(input1, input2, vectors):
+    s1words = set(vocab_check(vectors, input1.split()))
+    s2words = set(vocab_check(vectors, input2.split()))
+    
+    output = vectors.n_similarity(s1words, s2words)
+    return output
+
+
+
+# ===========================================================================================================
+''' Load a word2vec model '''
+def load_wordvec_model(modelName, modelFile, flagBin, model_path):
+    print('Loading ' + modelName + ' model...')
+    model = KeyedVectors.load_word2vec_format(model_path + modelFile, binary=flagBin)
+    print('Finished loading ' + modelName + ' model...')
+    return model
+
+#model_word2vec = load_wordvec_model('Word2Vec', 'GoogleNews-vectors-negative300.bin.gz', True)
