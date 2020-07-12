@@ -9,6 +9,8 @@ from nltk.stem.wordnet import WordNetLemmatizer
 
 import re
 
+import json
+
 import spacy
 from spacy.util import minibatch, compounding
 from spacy.pipeline import SentenceSegmenter
@@ -40,6 +42,19 @@ from gensim.models import KeyedVectors
 
 
 nlp = spacy.load('en_core_web_sm')
+
+
+
+# ===========================================================================================================
+''' Function to read JSON '''
+# Read in JSON object as a list of Python dictionaries
+
+def parse_json_file(json_file):
+    with open(json_file) as f:
+        data = f.readlines()
+    feeds = [json.loads(feed) for feed in data]
+    return feeds
+
 
 # ===========================================================================================================
 ''' FUNCTIONS TO CLEAN TEXT DATA FROM URL '''
