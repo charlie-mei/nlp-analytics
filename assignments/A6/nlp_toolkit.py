@@ -27,14 +27,6 @@ from sumy.parsers.html import HtmlParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
-sc = SparkContext() 
-sqlContext = SQLContext(sc)
-from pyspark.mllib.linalg import Vector, Vectors
-from pyspark.mllib.clustering import LDA, LDAModel
-from pyspark.ml.feature import RegexTokenizer, StopWordsRemover, Word2Vec
-
 import gensim, operator
 from scipy import spatial
 import numpy as np
@@ -411,42 +403,6 @@ class TextSummary(object):
     def output(self):
         return self.summary
     
-# ===========================================================================================================
-''' Text Cleaning Functions '''
-def cleanup_pretokenize(text):
-    #text = re.sub(r'^https?:\/\/.*[\r\n]*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'http\S+', '', text)
-    text = text.replace("'s", " ")
-    text = text.replace("n't", " not ")
-    text = text.replace("'ve", " have ")
-    text = text.replace("'re", " are ")
-    text = text.replace("I'm"," I am ")
-    text = text.replace("you're"," you are ")
-    text = text.replace("You're"," You are ")
-    text = text.replace("-"," ")
-    text = text.replace("/"," ")
-    text = text.replace("("," ")
-    text = text.replace(")"," ")
-    text = text.replace("%"," percent ")
-    return text
-
-
-def text_cleanup(row):
-    lmtzr = WordNetLemmatizer()
-    desc = row[2].strip().lower()
-    tokens = [w.lemma_ for w in nlp(cleanup_pretokenize(desc))]
-    tokens = [token for token in tokens if token.isalpha()]
-    tokens = [token for token in tokens if len(token) > 3]
-    #tokens = [lmtzr.lemmatize(token,'v') for token in tokens]
-    row[2] = ' '.join(tokens)
-    return row
-
-# Custom regex tokenizer
-regexTokenizer = RegexTokenizer(gaps = False, pattern = '\w+', inputCol = 'description', outputCol = 'tokens')
-
-# Custom stopword remover
-swr = StopWordsRemover(inputCol = 'tokens', outputCol = 'tokens_sw_removed')
-
 # function checks whether the input words are present in the vocabulary for the model
 def vocab_check(vectors, words):
     
@@ -456,16 +412,6 @@ def vocab_check(vectors, words):
             output.append(word.strip())
             
     return output
-
-
-# ===========================================================================================================
-''' Loading Crunchbase data '''
-
-def load_crunchbase_df(path):
-    crunchbase_df = sqlContext.read.option("header", "true").option("delimiter", ",") \
-                    .option("inferSchema", "true") \
-                    .csv(path)
-    return crunchbase_df
 
 # ===========================================================================================================
 ''' Word Vector Calculations '''
