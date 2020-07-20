@@ -13,3 +13,5 @@ __pycache__
 # Zipped files
 *.bin.gz
 *.zip
+
+Scripts/

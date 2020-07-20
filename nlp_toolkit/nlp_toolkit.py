@@ -44,7 +44,8 @@ nlp = spacy.load('en_core_web_sm')
 def parse_json_file(json_file):
     with open(json_file) as f:
         json_parsed = f.readlines()
-    return json_parsed
+    feeds = [json.loads(feed) for feed in data]
+    return feeds
 
 
 # ===========================================================================================================
