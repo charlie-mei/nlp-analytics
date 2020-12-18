@@ -19,3 +19,7 @@ Scripts/
 Lib/
 
 *.cfg
+
+*.history
+*.idea
+*.pdf
